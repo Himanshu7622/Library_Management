@@ -20,6 +20,76 @@ const SimpleApp: React.FC = () => {
   const [startupError, setStartupError] = useState(null);
   const [startupTimeout, setStartupTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  useEffect(() => {
+    // Set a timeout to show error if app doesn't respond within 10 seconds
+    const timeout = setTimeout(() => {
+      if (isLoading && !startupError) {
+        setStartupError({
+          phase: 'APP_TIMEOUT',
+          error: 'Application failed to load within 10 seconds. This usually indicates a problem with the database or Electron main process.',
+          timestamp: new Date().toISOString(),
+          platform: window.nodeEnv?.platform || 'unknown',
+          nodeVersion: window.nodeEnv?.isDev ? process.version : 'unknown',
+          arch: 'unknown'
+        });
+        setIsLoading(false);
+      }
+    }, 10000);
+
+    setStartupTimeout(timeout);
+
+    // Listen for startup events from main process
+    if (window.electronAPI?.onAppReady) {
+      window.electronAPI.onAppReady((data) => {
+        if (startupTimeout) {
+          clearTimeout(startupTimeout);
+        }
+
+        if (data.status === 'error') {
+          setStartupError(data.error);
+        } else if (data.status === 'success') {
+          // App ready successfully, proceed with normal flow
+          setIsLoading(false);
+        }
+      });
+    } else {
+      // Fallback for when electronAPI is not available (development mode)
+      setTimeout(() => {
+        if (startupTimeout) {
+          clearTimeout(startupTimeout);
+        }
+        setIsLoading(false);
+      }, 2000);
+    }
+
+    return () => {
+      if (startupTimeout) {
+        clearTimeout(startupTimeout);
+      }
+    };
+  }, []);
+
+  const handleRetry = () => {
+    setStartupError(null);
+    setIsLoading(true);
+
+    // Set timeout again
+    const timeout = setTimeout(() => {
+      if (isLoading && !startupError) {
+        setStartupError({
+          phase: 'APP_TIMEOUT',
+          error: 'Application failed to load within 10 seconds after retry.',
+          timestamp: new Date().toISOString(),
+          platform: window.nodeEnv?.platform || 'unknown',
+          nodeVersion: window.nodeEnv?.isDev ? process.version : 'unknown',
+          arch: 'unknown'
+        });
+        setIsLoading(false);
+      }
+    }, 10000);
+    setStartupTimeout(timeout);
+  };
+
   const handleLogin = async (pin: string) => {
     setIsLoading(true);
     // Simulate login delay

@@ -16,7 +16,9 @@ import SettingsPage from './pages/SettingsPage';
 
 const SimpleApp: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [startupError, setStartupError] = useState(null);
+  const [startupTimeout, setStartupTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const handleLogin = async (pin: string) => {
     setIsLoading(true);

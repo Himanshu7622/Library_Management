@@ -1,5 +1,5 @@
 const { getDatabase } = require('./database');
-const { format } = require('date-fns');
+const { format, addDays, differenceInDays } = require('date-fns');
 
 class DatabaseService {
   constructor() {
@@ -83,7 +83,7 @@ class DatabaseService {
       query += ` LIMIT ? OFFSET ?`;
       params.push(limit, offset);
 
-      const books = this.db.prepare(query).all(...params);
+      const books = await this.db.all(query, params);
 
       // Parse JSON fields
       return books.map(book => ({
@@ -109,7 +109,7 @@ class DatabaseService {
         WHERE b.id = ?
         GROUP BY b.id
       `;
-      const book = this.db.prepare(query).get(id);
+      const book = await this.db.get(query, id);
 
       if (!book) return null;
 
@@ -153,8 +153,8 @@ class DatabaseService {
         'available'
       ];
 
-      const result = this.db.prepare(query).run(...params);
-      return await this.getBookById(result.lastInsertRowid);
+      const result = await this.db.run(query, params);
+      return await this.getBookById(result.id);
     } catch (error) {
       if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         throw new Error('A book with this ISBN already exists');
@@ -190,7 +190,7 @@ class DatabaseService {
         id
       ];
 
-      const result = this.db.prepare(query).run(...params);
+      const result = await this.db.run(query, params);
 
       if (result.changes === 0) {
         throw new Error('Book not found');
@@ -209,16 +209,16 @@ class DatabaseService {
   async deleteBook(id) {
     try {
       // Check if book has active loans
-      const activeLoans = this.db.prepare(`
+      const activeLoans = await this.db.get(`
         SELECT COUNT(*) as count FROM transactions
         WHERE book_id = ? AND transaction_type = 'lend' AND return_date IS NULL
-      `).get(id);
+      `, id);
 
       if (activeLoans.count > 0) {
         throw new Error('Cannot delete book with active loans');
       }
 
-      const result = this.db.prepare('DELETE FROM books WHERE id = ?').run(id);
+      const result = await this.db.run('DELETE FROM books WHERE id = ?', id);
 
       if (result.changes === 0) {
         throw new Error('Book not found');
@@ -261,12 +261,12 @@ class DatabaseService {
         params.push(filters.memberType);
       }
 
+      query += ` GROUP BY m.id`;
+
       if (filters.hasActiveLoans === 'yes') {
         query += ` HAVING active_loans > 0`;
       } else if (filters.hasActiveLoans === 'no') {
         query += ` HAVING active_loans = 0`;
-      } else {
-        query += ` GROUP BY m.id`;
       }
 
       query += ` ORDER BY m.name`;
@@ -276,7 +276,7 @@ class DatabaseService {
       query += ` LIMIT ? OFFSET ?`;
       params.push(limit, offset);
 
-      return this.db.prepare(query).all(...params);
+      return await this.db.all(query, params);
     } catch (error) {
       console.error('Failed to get members:', error);
       throw error;
@@ -294,7 +294,7 @@ class DatabaseService {
         WHERE m.id = ?
         GROUP BY m.id
       `;
-      return this.db.prepare(query).get(id);
+      return await this.db.get(query, id);
     } catch (error) {
       console.error('Failed to get member by ID:', error);
       throw error;
@@ -319,8 +319,8 @@ class DatabaseService {
         memberData.notes || null
       ];
 
-      const result = this.db.prepare(query).run(...params);
-      return await this.getMemberById(result.lastInsertRowid);
+      const result = await this.db.run(query, params);
+      return await this.getMemberById(result.id);
     } catch (error) {
       if (error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
         if (error.message.includes('member_id')) {
@@ -355,7 +355,7 @@ class DatabaseService {
         id
       ];
 
-      const result = this.db.prepare(query).run(...params);
+      const result = await this.db.run(query, params);
 
       if (result.changes === 0) {
         throw new Error('Member not found');
@@ -379,16 +379,16 @@ class DatabaseService {
   async deleteMember(id) {
     try {
       // Check if member has active loans
-      const activeLoans = this.db.prepare(`
+      const activeLoans = await this.db.get(`
         SELECT COUNT(*) as count FROM transactions
         WHERE member_id = ? AND transaction_type = 'lend' AND return_date IS NULL
-      `).get(id);
+      `, id);
 
       if (activeLoans.count > 0) {
         throw new Error('Cannot delete member with active loans');
       }
 
-      const result = this.db.prepare('DELETE FROM members WHERE id = ?').run(id);
+      const result = await this.db.run('DELETE FROM members WHERE id = ?', id);
 
       if (result.changes === 0) {
         throw new Error('Member not found');
@@ -418,8 +418,8 @@ class DatabaseService {
         transactionData.notes || null
       ];
 
-      const result = this.db.prepare(query).run(...params);
-      return this.getTransactionById(result.lastInsertRowid);
+      const result = await this.db.run(query, params);
+      return this.getTransactionById(result.id);
     } catch (error) {
       console.error('Failed to create transaction:', error);
       throw error;
@@ -435,7 +435,7 @@ class DatabaseService {
         JOIN members m ON t.member_id = m.id
         WHERE t.id = ?
       `;
-      return this.db.prepare(query).get(id);
+      return await this.db.get(query, id);
     } catch (error) {
       console.error('Failed to get transaction by ID:', error);
       throw error;
@@ -459,7 +459,7 @@ class DatabaseService {
         WHERE t.transaction_type = 'lend' AND t.return_date IS NULL
         ORDER BY t.due_date ASC
       `;
-      const transactions = this.db.prepare(query).all();
+      const transactions = await this.db.all(query);
 
       // Parse JSON fields
       return transactions.map(transaction => ({
@@ -487,7 +487,7 @@ class DatabaseService {
           AND t.due_date < date('now')
         ORDER BY t.due_date ASC
       `;
-      const transactions = this.db.prepare(query).all();
+      const transactions = await this.db.all(query);
 
       // Parse JSON fields and calculate fines
       return transactions.map(transaction => ({
@@ -505,12 +505,11 @@ class DatabaseService {
       const query = `
         UPDATE transactions SET
           return_date = CURRENT_TIMESTAMP,
-          fine_amount = ?,
-          transaction_type = 'return'
+          fine_amount = ?
         WHERE id = ?
       `;
 
-      const result = this.db.prepare(query).run(fineAmount, transactionId);
+      const result = await this.db.run(query, fineAmount, transactionId);
 
       if (result.changes === 0) {
         throw new Error('Transaction not found');
@@ -526,7 +525,7 @@ class DatabaseService {
   // Settings operations
   async getSetting(key) {
     try {
-      const result = this.db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+      const result = await this.db.get('SELECT value FROM settings WHERE key = ?', key);
       return result ? result.value : null;
     } catch (error) {
       console.error('Failed to get setting:', error);
@@ -540,7 +539,7 @@ class DatabaseService {
         INSERT OR REPLACE INTO settings (key, value, updated_at)
         VALUES (?, ?, CURRENT_TIMESTAMP)
       `;
-      this.db.prepare(query).run(key, JSON.stringify(value));
+      await this.db.run(query, key, JSON.stringify(value));
       return true;
     } catch (error) {
       console.error('Failed to set setting:', error);
@@ -550,7 +549,7 @@ class DatabaseService {
 
   async getAllSettings() {
     try {
-      const settings = this.db.prepare('SELECT key, value FROM settings').all();
+      const settings = await this.db.all('SELECT key, value FROM settings');
       const result = {};
       settings.forEach(setting => {
         try {

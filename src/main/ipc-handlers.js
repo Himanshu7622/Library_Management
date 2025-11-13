@@ -337,16 +337,7 @@ class IPCHandlers {
 
     ipcMain.handle('transactions:getHistory', async (event, limit = 50) => {
       try {
-        const db = getDatabase().getDb();
-        const transactions = db.prepare(`
-          SELECT t.*, b.title as book_title, m.name as member_name
-          FROM transactions t
-          JOIN books b ON t.book_id = b.id
-          JOIN members m ON t.member_id = m.id
-          ORDER BY t.transaction_date DESC
-          LIMIT ?
-        `).all(limit);
-
+        const transactions = await this.dbService.getTransactionHistory(limit);
         return { success: true, data: transactions };
       } catch (error) {
         console.error('Error in transactions:getHistory:', error);

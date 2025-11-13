@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useDatabase } from '../../contexts/DatabaseContext';
+import { useDatabase } from '../hooks/useDatabase';
 import { Book, Plus, Search, Filter } from 'lucide-react';
 import { BookFilters } from '../../shared/types';
 

@@ -28,9 +28,12 @@ A modern desktop library management application built with Electron, React, and 
 ## 📦 Installation
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 18+ (Node.js 20 LTS recommended for Windows)
 - npm or yarn package manager
-- Build tools for native compilation (Linux: `build-essential`, macOS: Xcode Command Line Tools, Windows: Visual Studio Build Tools)
+- Build tools for native compilation:
+  - Linux: `build-essential` and `python3`
+  - macOS: Xcode Command Line Tools
+  - Windows: Visual Studio 2022 with C++ development tools OR Visual Studio Build Tools 2022
 
 ### Steps
 1. **Clone the repository**

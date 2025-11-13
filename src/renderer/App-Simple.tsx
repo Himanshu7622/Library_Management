@@ -172,12 +172,17 @@ const SimpleApp: React.FC = () => {
     </div>
   );
 
+  if (startupError) {
+    return <StartupError error={startupError} onRetry={handleRetry} />;
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading Library Management System...</p>
+          <p className="text-sm text-gray-500 mt-2">This may take a few moments on first run</p>
         </div>
       </div>
     );

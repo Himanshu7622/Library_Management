@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useDatabase } from '../../contexts/DatabaseContext';
+import { useDatabase } from '../hooks/useDatabase';
 import { LayoutDashboard, Book, Users, ArrowRightLeft, AlertTriangle } from 'lucide-react';
 
 const Dashboard: React.FC = () => {

@@ -360,18 +360,17 @@ class DatabaseConnection {
         return;
       }
 
-      this.db.run(sql, params, function(err) {
-        if (err) {
-          console.error('Failed to execute SQL:', err);
-          console.error('SQL:', sql);
-          reject(err);
-          return;
-        }
+      try {
+        const result = this.db.prepare(sql).run(params);
         resolve({
-          id: this.lastID,
-          changes: this.changes
+          id: result.lastInsertRowid,
+          changes: result.changes
         });
-      });
+      } catch (error) {
+        console.error('Failed to execute SQL:', error);
+        console.error('SQL:', sql);
+        reject(error);
+      }
     });
   }
 
@@ -385,15 +384,14 @@ class DatabaseConnection {
         return;
       }
 
-      this.db.get(sql, params, (err, row) => {
-        if (err) {
-          console.error('Failed to get row:', err);
-          console.error('SQL:', sql);
-          reject(err);
-          return;
-        }
+      try {
+        const row = this.db.prepare(sql).get(params);
         resolve(row);
-      });
+      } catch (error) {
+        console.error('Failed to get row:', error);
+        console.error('SQL:', sql);
+        reject(error);
+      }
     });
   }
 
@@ -407,15 +405,14 @@ class DatabaseConnection {
         return;
       }
 
-      this.db.all(sql, params, (err, rows) => {
-        if (err) {
-          console.error('Failed to get all rows:', err);
-          console.error('SQL:', sql);
-          reject(err);
-          return;
-        }
+      try {
+        const rows = this.db.prepare(sql).all(params);
         resolve(rows);
-      });
+      } catch (error) {
+        console.error('Failed to get all rows:', error);
+        console.error('SQL:', sql);
+        reject(error);
+      }
     });
   }
 }

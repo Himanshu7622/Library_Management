@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useDatabase } from '../../contexts/DatabaseContext';
+import { useDatabase } from '../hooks/useDatabase';
 import { Users, Plus, Search } from 'lucide-react';
 import { MemberFilters } from '../../shared/types';
 

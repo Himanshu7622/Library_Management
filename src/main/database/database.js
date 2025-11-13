@@ -69,19 +69,16 @@ class DatabaseConnection {
    */
   close() {
     return new Promise((resolve, reject) => {
-      if (this.db) {
-        this.db.close((err) => {
-          if (err) {
-            console.error('Failed to close database:', err);
-            reject(err);
-            return;
-          }
+      try {
+        if (this.db) {
+          this.db.close();
           this.db = null;
           console.log('Database connection closed');
-          resolve();
-        });
-      } else {
+        }
         resolve();
+      } catch (error) {
+        console.error('Failed to close database:', error);
+        reject(error);
       }
     });
   }
@@ -101,6 +98,49 @@ class DatabaseConnection {
    */
   isInitialized() {
     return this.db !== null;
+  }
+
+  /**
+   * Run migrations
+   */
+  async runMigrations() {
+    try {
+      // Ensure migrations table exists
+      this.db.exec(`
+        CREATE TABLE IF NOT EXISTS migrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          filename TEXT NOT NULL UNIQUE,
+          applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Get migration files
+      const migrationFiles = fs.readdirSync(path.join(__dirname, '../../database/migrations'))
+        .filter(file => file.endsWith('.sql'))
+        .sort();
+
+      // Get applied migrations
+      const appliedMigrations = this.db.prepare('SELECT filename FROM migrations').all();
+      const appliedFilenames = new Set(appliedMigrations.map(m => m.filename));
+
+      // Apply pending migrations
+      for (const file of migrationFiles) {
+        if (!appliedFilenames.has(file)) {
+          console.log('Applying migration:', file);
+          const migrationSQL = fs.readFileSync(path.join(__dirname, '../../database/migrations', file), 'utf8');
+          this.db.exec(migrationSQL);
+
+          // Record migration
+          this.db.prepare('INSERT INTO migrations (filename) VALUES (?)').run(file);
+          console.log('Migration applied successfully:', file);
+        }
+      }
+
+      console.log('All migrations completed successfully');
+    } catch (error) {
+      console.error('Migration failed:', error);
+      throw error;
+    }
   }
 
   /**

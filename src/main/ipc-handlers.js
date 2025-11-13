@@ -327,22 +327,8 @@ class IPCHandlers {
 
     ipcMain.handle('transactions:getByMemberId', async (event, memberId) => {
       try {
-        const db = getDatabase().getDb();
-        const transactions = db.prepare(`
-          SELECT t.*, b.title as book_title, b.authors as book_authors
-          FROM transactions t
-          JOIN books b ON t.book_id = b.id
-          WHERE t.member_id = ?
-          ORDER BY t.transaction_date DESC
-        `).all(memberId);
-
-        // Parse JSON fields
-        const parsedTransactions = transactions.map(transaction => ({
-          ...transaction,
-          book_authors: JSON.parse(transaction.book_authors || '[]'),
-        }));
-
-        return { success: true, data: parsedTransactions };
+        const transactions = await this.dbService.getTransactionsByMemberId(memberId);
+        return { success: true, data: transactions };
       } catch (error) {
         console.error('Error in transactions:getByMemberId:', error);
         return { success: false, error: error.message };
@@ -351,16 +337,7 @@ class IPCHandlers {
 
     ipcMain.handle('transactions:getHistory', async (event, limit = 50) => {
       try {
-        const db = getDatabase().getDb();
-        const transactions = db.prepare(`
-          SELECT t.*, b.title as book_title, m.name as member_name
-          FROM transactions t
-          JOIN books b ON t.book_id = b.id
-          JOIN members m ON t.member_id = m.id
-          ORDER BY t.transaction_date DESC
-          LIMIT ?
-        `).all(limit);
-
+        const transactions = await this.dbService.getTransactionHistory(limit);
         return { success: true, data: transactions };
       } catch (error) {
         console.error('Error in transactions:getHistory:', error);

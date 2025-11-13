@@ -4,7 +4,7 @@ import { Toaster } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 
 // Layout components
-import AppLayout from './components/Layout/AppLayout';
+import AppLayout from './components/Layout/AppLayout-Simple';
 
 // Page components
 import Dashboard from './pages/Dashboard';

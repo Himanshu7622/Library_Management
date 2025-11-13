@@ -522,6 +522,45 @@ class DatabaseService {
     }
   }
 
+  async getTransactionsByMemberId(memberId) {
+    try {
+      const query = `
+        SELECT t.*, b.title as book_title, b.authors as book_authors
+        FROM transactions t
+        JOIN books b ON t.book_id = b.id
+        WHERE t.member_id = ?
+        ORDER BY t.transaction_date DESC
+      `;
+      const transactions = await this.db.all(query, memberId);
+
+      // Parse JSON fields
+      return transactions.map(transaction => ({
+        ...transaction,
+        book_authors: this.parseJSON(transaction.book_authors),
+      }));
+    } catch (error) {
+      console.error('Failed to get transactions by member ID:', error);
+      throw error;
+    }
+  }
+
+  async getTransactionHistory(limit = 50) {
+    try {
+      const query = `
+        SELECT t.*, b.title as book_title, m.name as member_name
+        FROM transactions t
+        JOIN books b ON t.book_id = b.id
+        JOIN members m ON t.member_id = m.id
+        ORDER BY t.transaction_date DESC
+        LIMIT ?
+      `;
+      return await this.db.all(query, limit);
+    } catch (error) {
+      console.error('Failed to get transaction history:', error);
+      throw error;
+    }
+  }
+
   // Settings operations
   async getSetting(key) {
     try {

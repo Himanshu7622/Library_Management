@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
+
 const isDev = process.env.NODE_ENV === 'development';
 const { setupIpcHandlers } = require('../src/main/ipc-handlers');
 const { initializeDatabase } = require('../src/main/database/database');
@@ -27,7 +28,9 @@ function createWindow() {
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     // Open DevTools in development
-    mainWindow.webContents.openDevTools();
+    if (process.env.NODE_ENV === 'development') {
+      mainWindow.webContents.openDevTools();
+    }
   } else {
     mainWindow.loadFile(path.join(__dirname, '../build/index.html'));
   }
@@ -36,7 +39,7 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
 
-    if (isDev) {
+    if (process.env.NODE_ENV === 'development') {
       mainWindow.webContents.openDevTools();
     }
   });
@@ -51,6 +54,93 @@ function createWindow() {
     shell.openExternal(url);
     return { action: 'deny' };
   });
+}
+
+function setupApplicationMenu() {
+  const template = [
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Import Books (CSV)',
+          accelerator: 'CmdOrCtrl+I',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-import-books');
+            }
+          },
+        },
+        {
+          label: 'Export Books (CSV)',
+          accelerator: 'CmdOrCtrl+E',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-export-books');
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: 'Backup Database',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-backup-database');
+            }
+          },
+        },
+        { type: 'separator' },
+        {
+          label: isDev ? 'DevTools' : 'Quit',
+          accelerator: isDev ? 'F12' : process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+          click: () => {
+            if (isDev) {
+              if (mainWindow) {
+                mainWindow.webContents.toggleDevTools();
+              }
+            } else {
+              app.quit();
+            }
+          },
+        },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo', label: 'Undo' },
+        { role: 'redo', label: 'Redo' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Cut' },
+        { role: 'copy', label: 'Copy' },
+        { role: 'paste', label: 'Paste' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload', label: 'Reload' },
+        { role: 'forceReload', label: 'Force Reload' },
+        { role: 'toggleDevTools', label: 'Toggle Developer Tools' },
+        { type: 'separator' },
+        { role: 'resetZoom', label: 'Actual Size' },
+        { role: 'zoomIn', label: 'Zoom In' },
+        { role: 'zoomOut', label: 'Zoom Out' },
+        { type: 'separator' },
+        { role: 'togglefullscreen', label: 'Toggle Fullscreen' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize', label: 'Minimize' },
+        { role: 'close', label: 'Close' },
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 // Error handling and diagnostics
@@ -72,7 +162,6 @@ const logStartupError = (error, phase) => {
   // Write to error log file
   try {
     const fs = require('fs');
-    const path = require('path');
     const userDataPath = app.getPath('userData');
     const errorLogPath = path.join(userDataPath, 'startup-error.log');
     fs.writeFileSync(errorLogPath, JSON.stringify(startupError, null, 2));
@@ -121,6 +210,9 @@ app.whenReady().then(async () => {
     // Create main window
     createWindow();
 
+    // Setup application menu
+    setupApplicationMenu();
+
     // Send startup success to renderer after 1 second delay
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -136,6 +228,7 @@ app.whenReady().then(async () => {
 
     // Still create window to show error UI
     createWindow();
+    setupApplicationMenu();
 
     // Send error to renderer after 1 second delay
     setTimeout(() => {
@@ -152,94 +245,17 @@ app.whenReady().then(async () => {
   logStartupError(error, 'APP_READY');
 });
 
-  // Setup application menu
-  const template = [
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'Import Books (CSV)',
-          accelerator: 'CmdOrCtrl+I',
-          click: () => {
-            mainWindow.webContents.send('menu-import-books');
-          },
-        },
-        {
-          label: 'Export Books (CSV)',
-          accelerator: 'CmdOrCtrl+E',
-          click: () => {
-            mainWindow.webContents.send('menu-export-books');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Backup Database',
-          accelerator: 'CmdOrCtrl+B',
-          click: () => {
-            mainWindow.webContents.send('menu-backup-database');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: isDev ? 'DevTools' : 'Quit',
-          accelerator: isDev ? 'F12' : process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
-          click: () => {
-            if (isDev) {
-              mainWindow.webContents.toggleDevTools();
-            } else {
-              app.quit();
-            }
-          },
-        },
-      ],
-    },
-    {
-      label: 'Edit',
-      submenu: [
-        { role: 'undo', label: 'Undo' },
-        { role: 'redo', label: 'Redo' },
-        { type: 'separator' },
-        { role: 'cut', label: 'Cut' },
-        { role: 'copy', label: 'Copy' },
-        { role: 'paste', label: 'Paste' },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        { role: 'reload', label: 'Reload' },
-        { role: 'forceReload', label: 'Force Reload' },
-        { role: 'toggleDevTools', label: 'Toggle Developer Tools' },
-        { type: 'separator' },
-        { role: 'resetZoom', label: 'Actual Size' },
-        { role: 'zoomIn', label: 'Zoom In' },
-        { role: 'zoomOut', label: 'Zoom Out' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: 'Toggle Fullscreen' },
-      ],
-    },
-    {
-      label: 'Window',
-      submenu: [
-        { role: 'minimize', label: 'Minimize' },
-        { role: 'close', label: 'Close' },
-      ],
-    },
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
-});
-
+// Quit when all windows are closed, except on macOS
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('activate', () => {
+  // On macOS, re-create window when dock icon is clicked and no other windows open
+  if (BrowserWindow.getAllWindows().length === 0) {
+    createWindow();
   }
 });
 
@@ -253,3 +269,17 @@ app.on('web-contents-created', (event, contents) => {
 
 // Handle protocol for deep links (if needed)
 app.setAsDefaultProtocolClient('library-management');
+
+// Handle app before quit
+app.on('before-quit', (event) => {
+  // Save any unsaved data here if needed
+});
+
+// Handle certificates for development (optional)
+if (isDev) {
+  app.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+    // On development, ignore certificate errors
+    event.preventDefault();
+    callback(true);
+  });
+}

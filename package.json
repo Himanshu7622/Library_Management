@@ -30,7 +30,7 @@
   "author": "Library Management System",
   "license": "MIT",
   "devDependencies": {
-    "@types/bcrypt": "^5.0.2",
+    "@types/bcryptjs": "^2.4.6",
     "@types/jest": "^29.5.8",
     "@types/node": "^20.9.0",
     "@types/react": "^18.2.37",

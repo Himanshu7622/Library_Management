@@ -1,4 +1,4 @@
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 const { app } = require('electron');
@@ -13,46 +13,94 @@ class DatabaseConnection {
    * Initialize database connection
    */
   initialize() {
-    try {
-      // Get app data directory
-      const userDataPath = app.getPath('userData');
-      const dbDir = path.join(userDataPath, 'database');
+    return new Promise((resolve, reject) => {
+      try {
+        // Get app data directory
+        const userDataPath = app.getPath('userData');
+        const dbDir = path.join(userDataPath, 'database');
 
-      // Create database directory if it doesn't exist
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
+        // Create database directory if it doesn't exist
+        if (!fs.existsSync(dbDir)) {
+          fs.mkdirSync(dbDir, { recursive: true });
+        }
+
+        // Set database path
+        this.dbPath = path.join(dbDir, 'library.db');
+
+        // Connect to database
+        this.db = new sqlite3.Database(this.dbPath, (err) => {
+          if (err) {
+            console.error('Failed to connect to database:', err);
+            reject(err);
+            return;
+          }
+
+          console.log('Database connected successfully:', this.dbPath);
+          this.configureDatabase()
+            .then(() => resolve(true))
+            .catch(reject);
+        });
+      } catch (error) {
+        console.error('Failed to initialize database:', error);
+        reject(error);
       }
+    });
+  }
 
-      // Set database path
-      this.dbPath = path.join(dbDir, 'library.db');
-
-      // Connect to database
-      this.db = new Database(this.dbPath);
-
+  /**
+   * Configure database settings
+   */
+  configureDatabase() {
+    return new Promise((resolve, reject) => {
       // Configure database settings
-      this.db.pragma('journal_mode = WAL');
-      this.db.pragma('foreign_keys = ON');
-      this.db.pragma('synchronous = NORMAL');
-      this.db.pragma('cache_size = 10000');
-      this.db.pragma('temp_store = memory');
+      const settings = [
+        'PRAGMA journal_mode = WAL',
+        'PRAGMA foreign_keys = ON',
+        'PRAGMA synchronous = NORMAL',
+        'PRAGMA cache_size = 10000',
+        'PRAGMA temp_store = memory'
+      ];
 
-      console.log('Database connected successfully:', this.dbPath);
-      return true;
-    } catch (error) {
-      console.error('Failed to initialize database:', error);
-      throw error;
-    }
+      let completed = 0;
+      const total = settings.length;
+
+      settings.forEach((setting) => {
+        this.db.run(setting, (err) => {
+          if (err) {
+            console.error('Failed to set database setting:', setting, err);
+            reject(err);
+            return;
+          }
+
+          completed++;
+          if (completed === total) {
+            resolve();
+          }
+        });
+      });
+    });
   }
 
   /**
    * Close database connection
    */
   close() {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
-      console.log('Database connection closed');
-    }
+    return new Promise((resolve, reject) => {
+      if (this.db) {
+        this.db.close((err) => {
+          if (err) {
+            console.error('Failed to close database:', err);
+            reject(err);
+            return;
+          }
+          this.db = null;
+          console.log('Database connection closed');
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
   }
 
   /**
@@ -94,10 +142,9 @@ class DatabaseConnection {
         fs.mkdirSync(backupDir, { recursive: true });
       }
 
-      // Perform backup
-      const backup = new Database(backupPath);
-      this.db.backup(backup);
-      backup.close();
+      // For sqlite3, we need to use a different approach since backup() is not available
+      // We'll copy the database file directly
+      fs.copyFileSync(this.dbPath, backupPath);
 
       console.log('Database backed up successfully:', backupPath);
       return backupPath;
@@ -121,13 +168,13 @@ class DatabaseConnection {
 
     try {
       // Close current connection
-      this.close();
+      await this.close();
 
       // Copy backup file to database location
       fs.copyFileSync(backupPath, this.dbPath);
 
       // Reconnect to database
-      this.initialize();
+      await this.initialize();
 
       console.log('Database restored successfully from:', backupPath);
       return true;
@@ -141,35 +188,63 @@ class DatabaseConnection {
    * Get database size and stats
    */
   getStats() {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
 
-    try {
-      const stats = fs.statSync(this.dbPath);
+      try {
+        const stats = fs.statSync(this.dbPath);
 
-      // Get table counts
-      const tables = this.db.prepare(`
-        SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
-      `).all();
+        // Get table counts
+        this.db.all(`
+          SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
+        `, (err, tables) => {
+          if (err) {
+            reject(err);
+            return;
+          }
 
-      const tableCounts = {};
-      tables.forEach(table => {
-        const count = this.db.prepare(`SELECT COUNT(*) as count FROM ${table.name}`).get();
-        tableCounts[table.name] = count.count;
-      });
+          const tableCounts = {};
+          let completed = 0;
 
-      return {
-        path: this.dbPath,
-        size: stats.size,
-        sizeFormatted: this.formatFileSize(stats.size),
-        modified: stats.mtime,
-        tables: tableCounts,
-      };
-    } catch (error) {
-      console.error('Failed to get database stats:', error);
-      throw error;
-    }
+          if (tables.length === 0) {
+            resolve({
+              path: this.dbPath,
+              size: stats.size,
+              sizeFormatted: this.formatFileSize(stats.size),
+              modified: stats.mtime,
+              tables: tableCounts,
+            });
+            return;
+          }
+
+          tables.forEach((table) => {
+            this.db.get(`SELECT COUNT(*) as count FROM ${table.name}`, (err, count) => {
+              if (err) {
+                reject(err);
+                return;
+              }
+              tableCounts[table.name] = count.count;
+              completed++;
+
+              if (completed === tables.length) {
+                resolve({
+                  path: this.dbPath,
+                  size: stats.size,
+                  sizeFormatted: this.formatFileSize(stats.size),
+                  modified: stats.mtime,
+                  tables: tableCounts,
+                });
+              }
+            });
+          });
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
 
   /**
@@ -189,99 +264,136 @@ class DatabaseConnection {
    * Perform vacuum operation to optimize database
    */
   vacuum() {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
 
-    try {
-      this.db.exec('VACUUM');
-      console.log('Database vacuum completed');
-      return true;
-    } catch (error) {
-      console.error('Database vacuum failed:', error);
-      throw error;
-    }
+      this.db.run('VACUUM', (err) => {
+        if (err) {
+          console.error('Database vacuum failed:', err);
+          reject(err);
+          return;
+        }
+        console.log('Database vacuum completed');
+        resolve(true);
+      });
+    });
   }
 
   /**
    * Perform analyze operation to update query optimizer statistics
    */
   analyze() {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
 
-    try {
-      this.db.exec('ANALYZE');
-      console.log('Database analyze completed');
-      return true;
-    } catch (error) {
-      console.error('Database analyze failed:', error);
-      throw error;
-    }
+      this.db.run('ANALYZE', (err) => {
+        if (err) {
+          console.error('Database analyze failed:', err);
+          reject(err);
+          return;
+        }
+        console.log('Database analyze completed');
+        resolve(true);
+      });
+    });
   }
 
   /**
    * Check database integrity
    */
   checkIntegrity() {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
 
-    try {
-      const result = this.db.prepare('PRAGMA integrity_check').get();
-      return result.integrity_check === 'ok';
-    } catch (error) {
-      console.error('Database integrity check failed:', error);
-      return false;
-    }
-  }
+      this.db.get('PRAGMA integrity_check', (err, result) => {
+        if (err) {
+          console.error('Database integrity check failed:', err);
+          reject(err);
+          return;
+        }
 
-  /**
-   * Execute transaction with callback
-   */
-  transaction(callback) {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
-
-    const transaction = this.db.transaction(callback);
-    return transaction();
-  }
-
-  /**
-   * Prepare statement with error handling
-   */
-  prepare(sql) {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
-
-    try {
-      return this.db.prepare(sql);
-    } catch (error) {
-      console.error('Failed to prepare statement:', error);
-      console.error('SQL:', sql);
-      throw error;
-    }
+        const isOK = result && result.integrity_check === 'ok';
+        resolve(isOK);
+      });
+    });
   }
 
   /**
    * Execute SQL statement
    */
-  exec(sql) {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
+  run(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
 
-    try {
-      return this.db.exec(sql);
-    } catch (error) {
-      console.error('Failed to execute SQL:', error);
-      console.error('SQL:', sql);
-      throw error;
-    }
+      this.db.run(sql, params, function(err) {
+        if (err) {
+          console.error('Failed to execute SQL:', err);
+          console.error('SQL:', sql);
+          reject(err);
+          return;
+        }
+        resolve({
+          id: this.lastID,
+          changes: this.changes
+        });
+      });
+    });
+  }
+
+  /**
+   * Get single row
+   */
+  get(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.get(sql, params, (err, row) => {
+        if (err) {
+          console.error('Failed to get row:', err);
+          console.error('SQL:', sql);
+          reject(err);
+          return;
+        }
+        resolve(row);
+      });
+    });
+  }
+
+  /**
+   * Get all rows
+   */
+  all(sql, params = []) {
+    return new Promise((resolve, reject) => {
+      if (!this.db) {
+        reject(new Error('Database not initialized'));
+        return;
+      }
+
+      this.db.all(sql, params, (err, rows) => {
+        if (err) {
+          console.error('Failed to get all rows:', err);
+          console.error('SQL:', sql);
+          reject(err);
+          return;
+        }
+        resolve(rows);
+      });
+    });
   }
 }
 
@@ -302,11 +414,7 @@ function getDatabase() {
  * Initialize database
  */
 function initializeDatabase() {
-  const db = getDatabase();
-  if (!db.isInitialized()) {
-    db.initialize();
-  }
-  return db;
+  return getDatabase().initialize();
 }
 
 /**

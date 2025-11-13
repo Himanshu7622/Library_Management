@@ -1,6 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App from './App-Simple';
 import './index.css';
 
 // Hide loading screen once app is ready

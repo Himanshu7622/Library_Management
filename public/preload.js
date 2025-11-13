@@ -81,6 +81,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Remove listeners
   removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
+
+  // App startup events
+  onAppReady: (callback) => {
+    ipcRenderer.on('app-ready', (event, data) => callback(data));
+  },
 });
 
 // Expose node environment variables

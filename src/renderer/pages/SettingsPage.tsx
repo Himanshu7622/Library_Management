@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSettings } from '../../contexts/SettingsContext';
+import { useSettings } from '../hooks/useSettings';
 import { useAuth } from '../../contexts/AuthContext';
 import { Settings, Lock, Database, Palette, Save } from 'lucide-react';
 

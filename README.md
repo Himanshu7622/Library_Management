@@ -28,9 +28,12 @@ A modern desktop library management application built with Electron, React, and 
 ## 📦 Installation
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 18+ (Node.js 20 LTS recommended for Windows)
 - npm or yarn package manager
-- Build tools for native compilation (Linux: `build-essential`, macOS: Xcode Command Line Tools, Windows: Visual Studio Build Tools)
+- Build tools for native compilation:
+  - Linux: `build-essential` and `python3`
+  - macOS: Xcode Command Line Tools
+  - Windows: Visual Studio 2022 with C++ development tools OR Visual Studio Build Tools 2022
 
 ### Steps
 1. **Clone the repository**
@@ -53,6 +56,88 @@ A modern desktop library management application built with Electron, React, and 
    ```bash
    npm run build
    ```
+
+## 🪟 Windows Setup Guide
+
+This application uses `better-sqlite3` which requires native compilation. On Windows, you may encounter build errors, especially with Node.js 24+.
+
+### Recommended Setup for Windows
+
+#### Option 1: Use Node.js 20 LTS (Easiest)
+```bash
+# Download and install Node.js 20 LTS from https://nodejs.org
+# Then run:
+nvm use 20  # If using nvm
+# Delete existing modules and reinstall
+rd /s /q node_modules
+del package-lock.json
+npm install
+npm run dev
+```
+
+#### Option 2: Install Visual Studio 2022
+1. Install Visual Studio 2022 Community (free) with **C++ desktop development** workload
+2. Open **"x64 Native Tools Command Prompt for VS 2022"** from Start Menu
+3. Run the following commands:
+   ```cmd
+   vcvars64.bat
+   set GYP_MSVS_VERSION=2022
+   rd /s /q node_modules
+   del package-lock.json
+   npm install
+   npm run dev
+   ```
+
+#### Option 3: Install Visual Studio Build Tools 2022
+1. Download and install Visual Studio Build Tools 2022
+2. Select **"C++ build tools"** during installation
+3. Ensure Windows SDK v10.0.19041 or later is installed
+4. Run in Command Prompt:
+   ```cmd
+   set GYP_MSVS_VERSION=2022
+   rd /s /q node_modules
+   del package-lock.json
+   npm install
+   npm run dev
+   ```
+
+### Troubleshooting Windows Issues
+
+#### Error: "C++20 or later required"
+This means your Visual Studio installation doesn't support C++20. **Solution:** Install Visual Studio 2022 as described above.
+
+#### Error: "No prebuilt binaries found"
+This happens with Node.js 24+ on Windows. **Solutions:**
+1. Use Node.js 20 LTS (recommended)
+2. Build from source with Visual Studio 2022 (see above)
+3. The application will fall back to JSON database if compilation fails
+
+#### Error: "EPERM" during npm install
+**Solutions:**
+1. Close any running Node.js processes
+2. Open Command Prompt as Administrator
+3. Delete `node_modules` manually:
+   ```cmd
+   taskkill /f /im node.exe
+   rd /s /q node_modules
+   npm install
+   ```
+
+#### App hangs on "Loading Library Management System..."
+**Solutions:**
+1. Check the error log in `%APPDATA%\Library Management System\startup-error.log`
+2. Follow the error instructions shown in the error UI
+3. Ensure proper build tools are installed
+4. Try the Node.js 20 LTS option if using Node.js 24+
+
+### Git Bash vs Native Tools Command Prompt
+
+For Windows development:
+- **Git Bash**: Works for most operations but may have issues with native compilation
+- **Native Tools Command Prompt**: Recommended for `npm install` when building native modules
+- **PowerShell**: Can work but may need additional configuration
+
+**Best Practice:** Use Native Tools Command Prompt for `npm install`, Git Bash for Git operations.
 
 ## 🛠️ Development
 

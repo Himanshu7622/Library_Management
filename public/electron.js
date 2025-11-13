@@ -53,16 +53,104 @@ function createWindow() {
   });
 }
 
+// Error handling and diagnostics
+let startupError = null;
+const logStartupError = (error, phase) => {
+  startupError = {
+    phase,
+    error: error.message || error,
+    stack: error.stack,
+    timestamp: new Date().toISOString(),
+    platform: process.platform,
+    nodeVersion: process.version,
+    arch: process.arch
+  };
+
+  console.error(`[STARTUP ERROR] Phase: ${phase}`);
+  console.error(error);
+
+  // Write to error log file
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const userDataPath = app.getPath('userData');
+    const errorLogPath = path.join(userDataPath, 'startup-error.log');
+    fs.writeFileSync(errorLogPath, JSON.stringify(startupError, null, 2));
+  } catch (logError) {
+    console.error('Failed to write error log:', logError);
+  }
+};
+
+const initializeAppWithFallbacks = async () => {
+  try {
+    // Try to initialize the primary database first
+    await initializeDatabase();
+    console.log('Primary database initialized successfully');
+  } catch (dbError) {
+    logStartupError(dbError, 'DATABASE_INITIALIZATION');
+
+    // Try fallback database
+    try {
+      console.log('Attempting fallback database initialization...');
+      const { getDatabase } = require('../src/main/database/database');
+      const db = getDatabase();
+      await db.initialize();
+      console.log('Fallback database initialized successfully');
+    } catch (fallbackError) {
+      logStartupError(fallbackError, 'FALLBACK_DATABASE_INITIALIZATION');
+      throw fallbackError;
+    }
+  }
+
+  try {
+    // Setup IPC handlers
+    setupIpcHandlers();
+    console.log('IPC handlers setup successfully');
+  } catch (ipcError) {
+    logStartupError(ipcError, 'IPC_HANDLERS_SETUP');
+    throw ipcError;
+  }
+};
+
 // App event listeners
-app.whenReady().then(() => {
-  // Initialize database
-  initializeDatabase();
+app.whenReady().then(async () => {
+  try {
+    // Initialize with error handling
+    await initializeAppWithFallbacks();
 
-  // Setup IPC handlers
-  setupIpcHandlers();
+    // Create main window
+    createWindow();
 
-  // Create main window
-  createWindow();
+    // Send startup success to renderer after 1 second delay
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-ready', {
+          status: 'success',
+          timestamp: new Date().toISOString()
+        });
+      }
+    }, 1000);
+
+  } catch (error) {
+    logStartupError(error, 'APP_INITIALIZATION');
+
+    // Still create window to show error UI
+    createWindow();
+
+    // Send error to renderer after 1 second delay
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('app-ready', {
+          status: 'error',
+          error: startupError
+        });
+      }
+    }, 1000);
+  }
+}).catch(error => {
+  console.error('Critical error during app.whenReady():', error);
+  logStartupError(error, 'APP_READY');
+});
 
   // Setup application menu
   const template = [

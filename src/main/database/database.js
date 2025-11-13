@@ -28,18 +28,17 @@ class DatabaseConnection {
         this.dbPath = path.join(dbDir, 'library.db');
 
         // Connect to database
-        this.db = new sqlite3.Database(this.dbPath, (err) => {
-          if (err) {
-            console.error('Failed to connect to database:', err);
-            reject(err);
-            return;
-          }
+        this.db = new Database(this.dbPath);
 
-          console.log('Database connected successfully:', this.dbPath);
-          this.configureDatabase()
-            .then(() => resolve(true))
-            .catch(reject);
-        });
+        console.log('Database connected successfully:', this.dbPath);
+
+        // Configure database settings
+        this.configureDatabase();
+
+        // Run migrations
+        this.runMigrations()
+          .then(() => resolve(true))
+          .catch(reject);
       } catch (error) {
         console.error('Failed to initialize database:', error);
         reject(error);
@@ -51,33 +50,17 @@ class DatabaseConnection {
    * Configure database settings
    */
   configureDatabase() {
-    return new Promise((resolve, reject) => {
-      // Configure database settings
-      const settings = [
-        'PRAGMA journal_mode = WAL',
-        'PRAGMA foreign_keys = ON',
-        'PRAGMA synchronous = NORMAL',
-        'PRAGMA cache_size = 10000',
-        'PRAGMA temp_store = memory'
-      ];
+    // Configure database settings
+    const settings = [
+      'PRAGMA journal_mode = WAL',
+      'PRAGMA foreign_keys = ON',
+      'PRAGMA synchronous = NORMAL',
+      'PRAGMA cache_size = 10000',
+      'PRAGMA temp_store = memory'
+    ];
 
-      let completed = 0;
-      const total = settings.length;
-
-      settings.forEach((setting) => {
-        this.db.run(setting, (err) => {
-          if (err) {
-            console.error('Failed to set database setting:', setting, err);
-            reject(err);
-            return;
-          }
-
-          completed++;
-          if (completed === total) {
-            resolve();
-          }
-        });
-      });
+    settings.forEach((setting) => {
+      this.db.exec(setting);
     });
   }
 
